@@ -1,0 +1,79 @@
+<!doctype html>
+<html lang="pt-BR">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Instalar eQuantic Space</title>
+    <meta name="description" content="Suba a eQuantic Space self-hosted na sua VPS com um comando." />
+    <style>
+      :root {
+        --bg: #0b0e12; --panel: #12161c; --border: #232a33;
+        --text: #e6edf3; --muted: #9aa7b4; --primary: #10b981; --accent: #79c0ff;
+        --mono: ui-monospace, SFMono-Regular, "JetBrains Mono", Menlo, monospace;
+      }
+      * { box-sizing: border-box; }
+      body {
+        margin: 0; min-height: 100vh; background: var(--bg); color: var(--text);
+        font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+        display: grid; place-items: center; padding: 32px;
+        background-image: radial-gradient(900px 500px at 50% -10%, rgba(16,185,129,.12), transparent);
+      }
+      main { width: 100%; max-width: 680px; }
+      .brand { display: flex; align-items: center; gap: 10px; margin-bottom: 28px; }
+      .brand b { font-size: 17px; letter-spacing: -0.2px; }
+      .dot { width: 26px; height: 26px; border-radius: 50%;
+        background: conic-gradient(from 200deg, var(--primary), var(--accent)); }
+      h1 { font-size: 38px; line-height: 1.1; letter-spacing: -1px; margin: 0 0 14px; }
+      h1 span { color: var(--primary); }
+      p.lead { color: var(--muted); font-size: 16px; line-height: 1.6; margin: 0 0 28px; max-width: 56ch; }
+      .cmd {
+        display: flex; align-items: center; gap: 12px; background: var(--panel);
+        border: 1px solid var(--border); border-radius: 12px; padding: 16px 18px;
+        font-family: var(--mono); font-size: 14.5px; overflow-x: auto;
+      }
+      .cmd code { white-space: nowrap; }
+      .cmd code .p { color: var(--accent); }
+      .cmd button {
+        margin-left: auto; flex-shrink: 0; background: var(--primary); color: #04130d;
+        border: 0; border-radius: 8px; padding: 7px 13px; font-weight: 700; font-size: 12.5px;
+        cursor: pointer; font-family: inherit;
+      }
+      .cmd button:active { transform: translateY(1px); }
+      .steps { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; margin-top: 28px; }
+      .step { background: var(--panel); border: 1px solid var(--border); border-radius: 12px; padding: 16px; }
+      .step .n { width: 22px; height: 22px; border-radius: 50%; background: rgba(16,185,129,.14);
+        color: var(--primary); display: grid; place-items: center; font-size: 12px; font-weight: 700; margin-bottom: 10px; }
+      .step h3 { margin: 0 0 4px; font-size: 14px; }
+      .step p { margin: 0; color: var(--muted); font-size: 12.5px; line-height: 1.5; }
+      footer { margin-top: 32px; color: var(--muted); font-size: 12.5px; }
+      footer a { color: var(--accent); text-decoration: none; }
+      @media (max-width: 560px) { h1 { font-size: 30px; } .steps { grid-template-columns: 1fr; } }
+    </style>
+  </head>
+  <body>
+    <main>
+      <div class="brand"><span class="dot"></span><b>eQuantic Space</b></div>
+      <h1>Sua plataforma,<br /><span>num comando.</span></h1>
+      <p class="lead">
+        CI/CD, registry, Deploy e o workspace — self-hosted na sua própria VPS. Rode o comando
+        abaixo como root e termine a instalação pelo assistente no navegador.
+      </p>
+
+      <div class="cmd">
+        <code id="cmd"><span class="p">curl</span> -fsSL https://get.equantic.space/install.sh | <span class="p">sudo</span> sh</code>
+        <button onclick="navigator.clipboard.writeText(document.getElementById('cmd').innerText);this.textContent='copiado'">copiar</button>
+      </div>
+
+      <div class="steps">
+        <div class="step"><div class="n">1</div><h3>Rode o comando</h3><p>O instalador sobe um ambiente mínimo — não instala nada permanente no host.</p></div>
+        <div class="step"><div class="n">2</div><h3>Abra o /setup</h3><p>Acesse <code>http://SEU-IP:3000/setup</code> e siga o assistente.</p></div>
+        <div class="step"><div class="n">3</div><h3>Pronto</h3><p>A plataforma se provisiona no Kubernetes da VPS, com HTTPS automático.</p></div>
+      </div>
+
+      <footer>
+        Requisitos: uma VPS Linux (x64 ou arm64) com acesso root. ·
+        <a href="https://github.com/eQuantic/equantic-space-setup">Código do instalador</a>
+      </footer>
+    </main>
+  </body>
+</html>
