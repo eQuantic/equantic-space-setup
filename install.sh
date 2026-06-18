@@ -76,7 +76,7 @@ start() { # name, workdir, env-prefixed command…
 
 start api "$APP_DIR/api" \
   API_PORT="$API_PORT" WEB_URL="http://localhost:$SETUP_PORT" \
-  EQS_IMAGE_BUNDLE_DIR="$APP_DIR/images" \
+  EQS_IMAGE_BUNDLE_DIR="$APP_DIR/images" EQS_RUN_DIR="$EQS_HOME/run" \
   "$NODE_BIN" dist/main.setup.js
 start web "$APP_DIR/web" \
   PORT="$SETUP_PORT" HOSTNAME=0.0.0.0 NEXT_PUBLIC_API_URL="http://localhost:$API_PORT" \
