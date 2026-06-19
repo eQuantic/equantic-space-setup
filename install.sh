@@ -57,16 +57,34 @@ curl -fSL "$BUNDLE_URL" -o "$EQS_HOME/bundle.tar.gz" \
   || die "Bundle não encontrado para linux-$ARCH. Gere com: EQS_PLATFORM=linux/$ARCH ./scripts/release-setup.sh"
 tar -xz -C "$APP_DIR" -f "$EQS_HOME/bundle.tar.gz" --strip-components=1
 rm -f "$EQS_HOME/bundle.tar.gz"
-ok "Bundle extraído ($(cat "$APP_DIR/VERSION" 2>/dev/null || echo '?'))"
+VERSION="$(cat "$APP_DIR/VERSION" 2>/dev/null || echo '')"
+ok "Bundle extraído (${VERSION:-?})"
 
-# ── 4. stop any previous setup processes ──────────────────────────────────────
+# ── 4. update mode — upgrade an existing platform in place (ADR-012) ───────────
+# When a platform is already running on this host, upgrade it from THIS bundle
+# host-side (the images travel in the bundle — no registry, no GitHub) instead of
+# re-running the install wizard. This is the only upgrade path for instances that
+# predate the in-cluster auto-update. Force the first-run wizard with
+# EQS_FORCE_INSTALL=1 (recovery).
+if [ "${EQS_FORCE_INSTALL:-0}" != "1" ] \
+  && command -v k3s >/dev/null 2>&1 \
+  && k3s kubectl get deployment equantic-api -n equantic >/dev/null 2>&1; then
+  log "Plataforma existente detectada — atualizando para ${VERSION:-?} (sem reinstalar)…"
+  if ( cd "$APP_DIR/api" && EQS_IMAGE_BUNDLE_DIR="$APP_DIR/images" EQS_VERSION="$VERSION" "$NODE_BIN" dist/main.update.js ); then
+    ok "Plataforma atualizada para ${VERSION:-?}."
+    exit 0
+  fi
+  die "A atualização falhou — a versão anterior segue no ar (veja os logs acima)."
+fi
+
+# ── 5. stop any previous setup processes ──────────────────────────────────────
 for p in api web; do
   pidf="$EQS_HOME/run/$p.pid"
   [ -f "$pidf" ] && kill "$(cat "$pidf")" 2>/dev/null || true
   rm -f "$pidf"
 done
 
-# ── 5. start api (setup mode, stateless) + web, detached ──────────────────────
+# ── 6. start api (setup mode, stateless) + web, detached ──────────────────────
 start() { # name, workdir, env-prefixed command…
   name="$1"; shift; wd="$1"; shift
   log "Subindo ${name}…"
@@ -77,12 +95,13 @@ start() { # name, workdir, env-prefixed command…
 start api "$APP_DIR/api" \
   API_PORT="$API_PORT" WEB_URL="http://localhost:$SETUP_PORT" \
   EQS_IMAGE_BUNDLE_DIR="$APP_DIR/images" EQS_RUN_DIR="$EQS_HOME/run" \
+  EQS_VERSION="$VERSION" \
   "$NODE_BIN" dist/main.setup.js
 start web "$APP_DIR/web" \
   PORT="$SETUP_PORT" HOSTNAME=0.0.0.0 NEXT_PUBLIC_API_URL="http://localhost:$API_PORT" \
   "$NODE_BIN" apps/web/server.js
 
-# ── 6. wait for the wizard to answer, then print the URL ──────────────────────
+# ── 7. wait for the wizard to answer, then print the URL ──────────────────────
 log "Aguardando o assistente…"
 i=0
 until curl -fsS "http://localhost:$SETUP_PORT/setup" >/dev/null 2>&1; do
