@@ -23,14 +23,14 @@ ok()   { printf '\033[32m✓\033[0m %s\n' "$1"; }
 die()  { printf '\033[31m✗ %s\033[0m\n' "$1" >&2; exit 1; }
 
 # ── 1. host checks ────────────────────────────────────────────────────────────
-[ "$(uname -s)" = "Linux" ] || die "Apenas Linux é suportado (esta é a sua estação? rode na VPS)."
+[ "$(uname -s)" = "Linux" ] || die "Only Linux is supported (is this your workstation? run it on the VPS)."
 case "$(uname -m)" in
   x86_64|amd64)  ARCH="x64" ;;
   aarch64|arm64) ARCH="arm64" ;;
-  *) die "Arquitetura não suportada: $(uname -m)" ;;
+  *) die "Unsupported architecture: $(uname -m)" ;;
 esac
-command -v curl >/dev/null 2>&1 || die "curl é necessário."
-command -v tar  >/dev/null 2>&1 || die "tar é necessário."
+command -v curl >/dev/null 2>&1 || die "curl is required."
+command -v tar  >/dev/null 2>&1 || die "tar is required."
 
 # ── 1b. fleet join mode — add THIS host to an existing cluster (ADR-017) ──────
 # When a join grant is present, this box is a NEW NODE joining an existing
@@ -38,44 +38,44 @@ command -v tar  >/dev/null 2>&1 || die "tar é necessário."
 # (served from the same Pages host as this installer) and hand off to join.sh —
 # it does the WireGuard + k3s-join. No portable Node / platform bundle needed.
 if [ -n "${EQS_JOIN_GRANT:-}" ]; then
-  [ -n "${EQS_CONTROL_PLANE:-}" ] || die "EQS_CONTROL_PLANE é necessário para entrar no fleet."
-  log "Modo fleet: entrando no cluster existente…"
+  [ -n "${EQS_CONTROL_PLANE:-}" ] || die "EQS_CONTROL_PLANE is required to join the fleet."
+  log "Fleet mode: joining the existing cluster…"
   SCRIPTS_BASE="${EQS_SCRIPTS_BASE:-https://get.equantic.space}"
   JOIN_DIR="$(mktemp -d)"
-  curl -fsSL "$SCRIPTS_BASE/join.sh"        -o "$JOIN_DIR/join.sh"        || die "Não foi possível baixar join.sh de $SCRIPTS_BASE."
-  curl -fsSL "$SCRIPTS_BASE/eqs-wg-sync.sh" -o "$JOIN_DIR/eqs-wg-sync.sh" || die "Não foi possível baixar eqs-wg-sync.sh de $SCRIPTS_BASE."
+  curl -fsSL "$SCRIPTS_BASE/join.sh"        -o "$JOIN_DIR/join.sh"        || die "Could not download join.sh from $SCRIPTS_BASE."
+  curl -fsSL "$SCRIPTS_BASE/eqs-wg-sync.sh" -o "$JOIN_DIR/eqs-wg-sync.sh" || die "Could not download eqs-wg-sync.sh from $SCRIPTS_BASE."
   chmod +x "$JOIN_DIR/join.sh" "$JOIN_DIR/eqs-wg-sync.sh"
   # exec hands over the process (and the env, incl. EQS_JOIN_GRANT/EQS_CONTROL_PLANE).
   exec sh "$JOIN_DIR/join.sh"
 fi
 
-log "eQuantic Space — instalador (linux-$ARCH)"
+log "eQuantic Space — installer (linux-$ARCH)"
 mkdir -p "$EQS_HOME" "$EQS_HOME/run" "$EQS_HOME/logs"
 
 # ── 2. portable Node (downloaded, not installed system-wide) ──────────────────
 NODE_DIR="$EQS_HOME/node"
 NODE_BIN="$NODE_DIR/bin/node"
 if [ ! -x "$NODE_BIN" ] || [ "$("$NODE_BIN" -v 2>/dev/null || true)" != "v$NODE_VERSION" ]; then
-  log "Baixando Node v$NODE_VERSION (portátil)…"
+  log "Downloading Node v$NODE_VERSION (portable)…"
   rm -rf "$NODE_DIR"; mkdir -p "$NODE_DIR"
   curl -fsSL "https://nodejs.org/dist/v$NODE_VERSION/node-v$NODE_VERSION-linux-$ARCH.tar.gz" \
     | tar -xz -C "$NODE_DIR" --strip-components=1
-  ok "Node pronto"
+  ok "Node ready"
 else
-  ok "Node v$NODE_VERSION já presente"
+  ok "Node v$NODE_VERSION already present"
 fi
 
 # ── 3. platform bundle (standalone web + api) ─────────────────────────────────
-log "Baixando a plataforma (bundle standalone)…"
+log "Downloading the platform (standalone bundle)…"
 APP_DIR="$EQS_HOME/app"
 rm -rf "$APP_DIR"; mkdir -p "$APP_DIR"
 BUNDLE_URL="https://github.com/$REPO/releases/latest/download/equantic-space-linux-$ARCH.tar.gz"
 curl -fSL "$BUNDLE_URL" -o "$EQS_HOME/bundle.tar.gz" \
-  || die "Bundle não encontrado para linux-$ARCH. Gere com: EQS_PLATFORM=linux/$ARCH ./scripts/release-setup.sh"
+  || die "Bundle not found for linux-$ARCH. Build it with: EQS_PLATFORM=linux/$ARCH ./scripts/release-setup.sh"
 tar -xz -C "$APP_DIR" -f "$EQS_HOME/bundle.tar.gz" --strip-components=1
 rm -f "$EQS_HOME/bundle.tar.gz"
 VERSION="$(cat "$APP_DIR/VERSION" 2>/dev/null || echo '')"
-ok "Bundle extraído (${VERSION:-?})"
+ok "Bundle extracted (${VERSION:-?})"
 
 # ── 4. update mode — upgrade an existing platform in place (ADR-012) ───────────
 # When a platform is already running on this host, upgrade it from THIS bundle
@@ -86,12 +86,12 @@ ok "Bundle extraído (${VERSION:-?})"
 if [ "${EQS_FORCE_INSTALL:-0}" != "1" ] \
   && command -v k3s >/dev/null 2>&1 \
   && k3s kubectl get deployment equantic-space-api -n equantic-space >/dev/null 2>&1; then
-  log "Plataforma existente detectada — atualizando para ${VERSION:-?} (sem reinstalar)…"
+  log "Existing platform detected — updating to ${VERSION:-?} (without reinstalling)…"
   if ( cd "$APP_DIR/api" && EQS_IMAGE_BUNDLE_DIR="$APP_DIR/images" EQS_VERSION="$VERSION" "$NODE_BIN" dist/main.update.js ); then
-    ok "Plataforma atualizada para ${VERSION:-?}."
+    ok "Platform updated to ${VERSION:-?}."
     exit 0
   fi
-  die "A atualização falhou — a versão anterior segue no ar (veja os logs acima)."
+  die "The update failed — the previous version is still running (see the logs above)."
 fi
 
 # ── 5. stop any previous setup processes ──────────────────────────────────────
@@ -104,7 +104,7 @@ done
 # ── 6. start api (setup mode, stateless) + web, detached ──────────────────────
 start() { # name, workdir, env-prefixed command…
   name="$1"; shift; wd="$1"; shift
-  log "Subindo ${name}…"
+  log "Starting ${name}…"
   # nohup so the servers survive the `curl | sh` pipe closing (no systemd needed).
   ( cd "$wd" && nohup env "$@" >"$EQS_HOME/logs/$name.log" 2>&1 & echo $! >"$EQS_HOME/run/$name.pid" )
 }
@@ -119,14 +119,14 @@ start platform "$APP_DIR/platform" \
   "$NODE_BIN" apps/platform/server.js
 
 # ── 7. wait for the wizard to answer, then print the URL ──────────────────────
-log "Aguardando o assistente…"
+log "Waiting for the wizard…"
 i=0
 until curl -fsS "http://localhost:$SETUP_PORT/setup" >/dev/null 2>&1; do
-  i=$((i + 1)); [ "$i" -gt 60 ] && die "O assistente não respondeu. Veja $EQS_HOME/logs/."
+  i=$((i + 1)); [ "$i" -gt 60 ] && die "The wizard did not respond. See $EQS_HOME/logs/."
   sleep 1
 done
 
-IP="$(curl -fsS --max-time 4 https://api.ipify.org 2>/dev/null || hostname -I 2>/dev/null | awk '{print $1}' || echo 'SEU-IP')"
-ok "eQuantic Space pronto para instalação!"
-printf '\n  Abra no navegador:  \033[1;32mhttp://%s:%s/setup\033[0m\n\n' "$IP" "$SETUP_PORT"
-printf '  Logs:  %s/logs/   ·   parar:  kill \$(cat %s/run/*.pid)\n\n' "$EQS_HOME" "$EQS_HOME"
+IP="$(curl -fsS --max-time 4 https://api.ipify.org 2>/dev/null || hostname -I 2>/dev/null | awk '{print $1}' || echo 'YOUR-IP')"
+ok "eQuantic Space ready to install!"
+printf '\n  Open in your browser:  \033[1;32mhttp://%s:%s/setup\033[0m\n\n' "$IP" "$SETUP_PORT"
+printf '  Logs:  %s/logs/   ·   stop:  kill \$(cat %s/run/*.pid)\n\n' "$EQS_HOME" "$EQS_HOME"

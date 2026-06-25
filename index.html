@@ -1,10 +1,10 @@
 <!doctype html>
-<html lang="pt-BR">
+<html lang="en">
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>Instalar eQuantic Space</title>
-    <meta name="description" content="Suba a eQuantic Space self-hosted na sua VPS com um comando." />
+    <title>Install eQuantic Space</title>
+    <meta name="description" content="Spin up self-hosted eQuantic Space on your VPS with a single command." />
     <style>
       :root {
         --bg: #0b0e12; --panel: #12161c; --border: #232a33;
@@ -53,26 +53,26 @@
   <body>
     <main>
       <div class="brand"><span class="dot"></span><b>eQuantic Space</b></div>
-      <h1>Sua plataforma,<br /><span>num comando.</span></h1>
+      <h1>Your platform,<br /><span>in one command.</span></h1>
       <p class="lead">
-        CI/CD, registry, Deploy e o workspace — self-hosted na sua própria VPS. Rode o comando
-        abaixo como root e termine a instalação pelo assistente no navegador.
+        CI/CD, registry, Deploy and the workspace — self-hosted on your own VPS. Run the command
+        below as root and finish the install from the wizard in your browser.
       </p>
 
       <div class="cmd">
         <code id="cmd"><span class="p">curl</span> -fsSL https://get.equantic.space/install.sh | <span class="p">sudo</span> sh</code>
-        <button onclick="navigator.clipboard.writeText(document.getElementById('cmd').innerText);this.textContent='copiado'">copiar</button>
+        <button onclick="navigator.clipboard.writeText(document.getElementById('cmd').innerText);this.textContent='copied'">copy</button>
       </div>
 
       <div class="steps">
-        <div class="step"><div class="n">1</div><h3>Rode o comando</h3><p>O instalador sobe um ambiente mínimo — não instala nada permanente no host.</p></div>
-        <div class="step"><div class="n">2</div><h3>Abra o /setup</h3><p>Acesse <code>http://SEU-IP:3000/setup</code> e siga o assistente.</p></div>
-        <div class="step"><div class="n">3</div><h3>Pronto</h3><p>A plataforma se provisiona no Kubernetes da VPS, com HTTPS automático.</p></div>
+        <div class="step"><div class="n">1</div><h3>Run the command</h3><p>The installer brings up a minimal environment — it installs nothing permanent on the host.</p></div>
+        <div class="step"><div class="n">2</div><h3>Open /setup</h3><p>Visit <code>http://YOUR-IP:3000/setup</code> and follow the wizard.</p></div>
+        <div class="step"><div class="n">3</div><h3>Done</h3><p>The platform provisions itself on the VPS's Kubernetes, with automatic HTTPS.</p></div>
       </div>
 
       <footer>
-        Requisitos: uma VPS Linux (x64 ou arm64) com acesso root. ·
-        <a href="https://github.com/eQuantic/equantic-space-setup">Código do instalador</a>
+        Requirements: a Linux VPS (x64 or arm64) with root access. ·
+        <a href="https://github.com/eQuantic/equantic-space-setup">Installer source</a>
       </footer>
     </main>
   </body>
