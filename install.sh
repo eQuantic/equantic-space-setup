@@ -32,6 +32,23 @@ esac
 command -v curl >/dev/null 2>&1 || die "curl é necessário."
 command -v tar  >/dev/null 2>&1 || die "tar é necessário."
 
+# ── 1b. fleet join mode — add THIS host to an existing cluster (ADR-017) ──────
+# When a join grant is present, this box is a NEW NODE joining an existing
+# eQuantic Space fleet, not a first install. Download the host-side fleet scripts
+# (served from the same Pages host as this installer) and hand off to join.sh —
+# it does the WireGuard + k3s-join. No portable Node / platform bundle needed.
+if [ -n "${EQS_JOIN_GRANT:-}" ]; then
+  [ -n "${EQS_CONTROL_PLANE:-}" ] || die "EQS_CONTROL_PLANE é necessário para entrar no fleet."
+  log "Modo fleet: entrando no cluster existente…"
+  SCRIPTS_BASE="${EQS_SCRIPTS_BASE:-https://get.equantic.space}"
+  JOIN_DIR="$(mktemp -d)"
+  curl -fsSL "$SCRIPTS_BASE/join.sh"        -o "$JOIN_DIR/join.sh"        || die "Não foi possível baixar join.sh de $SCRIPTS_BASE."
+  curl -fsSL "$SCRIPTS_BASE/eqs-wg-sync.sh" -o "$JOIN_DIR/eqs-wg-sync.sh" || die "Não foi possível baixar eqs-wg-sync.sh de $SCRIPTS_BASE."
+  chmod +x "$JOIN_DIR/join.sh" "$JOIN_DIR/eqs-wg-sync.sh"
+  # exec hands over the process (and the env, incl. EQS_JOIN_GRANT/EQS_CONTROL_PLANE).
+  exec sh "$JOIN_DIR/join.sh"
+fi
+
 log "eQuantic Space — instalador (linux-$ARCH)"
 mkdir -p "$EQS_HOME" "$EQS_HOME/run" "$EQS_HOME/logs"
 
