@@ -85,7 +85,7 @@ ok "Bundle extraído (${VERSION:-?})"
 # EQS_FORCE_INSTALL=1 (recovery).
 if [ "${EQS_FORCE_INSTALL:-0}" != "1" ] \
   && command -v k3s >/dev/null 2>&1 \
-  && k3s kubectl get deployment equantic-api -n equantic >/dev/null 2>&1; then
+  && k3s kubectl get deployment equantic-space-api -n equantic-space >/dev/null 2>&1; then
   log "Plataforma existente detectada — atualizando para ${VERSION:-?} (sem reinstalar)…"
   if ( cd "$APP_DIR/api" && EQS_IMAGE_BUNDLE_DIR="$APP_DIR/images" EQS_VERSION="$VERSION" "$NODE_BIN" dist/main.update.js ); then
     ok "Plataforma atualizada para ${VERSION:-?}."
@@ -95,7 +95,7 @@ if [ "${EQS_FORCE_INSTALL:-0}" != "1" ] \
 fi
 
 # ── 5. stop any previous setup processes ──────────────────────────────────────
-for p in api web; do
+for p in api platform; do
   pidf="$EQS_HOME/run/$p.pid"
   [ -f "$pidf" ] && kill "$(cat "$pidf")" 2>/dev/null || true
   rm -f "$pidf"
@@ -114,9 +114,9 @@ start api "$APP_DIR/api" \
   EQS_IMAGE_BUNDLE_DIR="$APP_DIR/images" EQS_RUN_DIR="$EQS_HOME/run" \
   EQS_VERSION="$VERSION" \
   "$NODE_BIN" dist/main.setup.js
-start web "$APP_DIR/web" \
+start platform "$APP_DIR/platform" \
   PORT="$SETUP_PORT" HOSTNAME=0.0.0.0 NEXT_PUBLIC_API_URL="http://localhost:$API_PORT" \
-  "$NODE_BIN" apps/web/server.js
+  "$NODE_BIN" apps/platform/server.js
 
 # ── 7. wait for the wizard to answer, then print the URL ──────────────────────
 log "Aguardando o assistente…"
