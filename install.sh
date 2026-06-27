@@ -32,6 +32,29 @@ esac
 command -v curl >/dev/null 2>&1 || die "curl is required."
 command -v tar  >/dev/null 2>&1 || die "tar is required."
 
+# Drop the `eqs` CLI on the box too, so the operator can drive the platform from
+# the terminal (its own independent cli-v* release — ADR-020 F4). Best-effort: a
+# CLI hiccup must never fail the platform install. Opt out with EQS_SKIP_CLI=1.
+install_cli() {
+  [ "${EQS_SKIP_CLI:-0}" = "1" ] && return 0
+  if command -v eqs >/dev/null 2>&1; then ok "eqs CLI already installed"; return 0; fi
+  log "Installing the eqs CLI…"
+  cli_tag="$(curl -fsSL "https://api.github.com/repos/$REPO/releases" 2>/dev/null \
+    | grep -oE '"tag_name": *"cli-v[^"]+"' | head -1 \
+    | sed -E 's/.*"(cli-v[^"]+)".*/\1/')"
+  if [ -z "$cli_tag" ]; then
+    printf '\033[33m! eqs CLI release not found yet — skipping\033[0m\n'
+    return 0
+  fi
+  if curl -fSL "https://github.com/$REPO/releases/download/$cli_tag/eqs-linux-$ARCH" \
+       -o /usr/local/bin/eqs 2>/dev/null; then
+    chmod +x /usr/local/bin/eqs
+    ok "eqs CLI $cli_tag installed — run: eqs login"
+  else
+    printf '\033[33m! eqs CLI download failed — skipping (later: curl -fsSL https://get.equantic.space/cli | sh)\033[0m\n'
+  fi
+}
+
 # ── 1b. fleet join mode — add THIS host to an existing cluster (ADR-017) ──────
 # When a join grant is present, this box is a NEW NODE joining an existing
 # eQuantic Space fleet, not a first install. Download the host-side fleet scripts
@@ -89,6 +112,7 @@ if [ "${EQS_FORCE_INSTALL:-0}" != "1" ] \
   log "Existing platform detected — updating to ${VERSION:-?} (without reinstalling)…"
   if ( cd "$APP_DIR/api" && EQS_IMAGE_BUNDLE_DIR="$APP_DIR/images" EQS_VERSION="$VERSION" "$NODE_BIN" dist/main.update.js ); then
     ok "Platform updated to ${VERSION:-?}."
+    install_cli
     exit 0
   fi
   die "The update failed — the previous version is still running (see the logs above)."
@@ -125,6 +149,8 @@ until curl -fsS "http://localhost:$SETUP_PORT/setup" >/dev/null 2>&1; do
   i=$((i + 1)); [ "$i" -gt 60 ] && die "The wizard did not respond. See $EQS_HOME/logs/."
   sleep 1
 done
+
+install_cli
 
 IP="$(curl -fsS --max-time 4 https://api.ipify.org 2>/dev/null || hostname -I 2>/dev/null | awk '{print $1}' || echo 'YOUR-IP')"
 ok "eQuantic Space ready to install!"
