@@ -1,0 +1,48 @@
+#!/bin/sh
+# get.equantic.space/cli — install the `eqs` CLI (ADR-020 F4).
+#
+#   curl -fsSL https://get.equantic.space/cli | sh
+#
+# Detects the OS/arch, grabs the matching standalone binary from the latest
+# `cli-v*` release on equantic-space-setup, and drops it in $EQS_INSTALL_DIR
+# (default /usr/local/bin). No Node/Bun needed — the binary is self-contained.
+set -e
+
+REPO="eQuantic/equantic-space-setup"
+INSTALL_DIR="${EQS_INSTALL_DIR:-/usr/local/bin}"
+
+os="$(uname -s | tr '[:upper:]' '[:lower:]')"
+arch="$(uname -m)"
+case "$arch" in
+  x86_64 | amd64) arch="x64" ;;
+  aarch64 | arm64) arch="arm64" ;;
+  *) echo "eqs: unsupported arch '$arch'" >&2; exit 1 ;;
+esac
+case "$os" in
+  linux | darwin) ;;
+  *) echo "eqs: unsupported OS '$os' — grab a binary from the releases page" >&2; exit 1 ;;
+esac
+asset="eqs-$os-$arch"
+
+# Latest cli-v* tag (the API lists releases newest-first; filter to the CLI stream
+# so a newer platform `v*` release doesn't shadow it).
+tag="$(curl -fsSL "https://api.github.com/repos/$REPO/releases" \
+  | grep -oE '"tag_name": *"cli-v[^"]+"' | head -1 \
+  | sed -E 's/.*"(cli-v[^"]+)".*/\1/')"
+[ -n "$tag" ] || { echo "eqs: no cli release found on $REPO" >&2; exit 1; }
+
+url="https://github.com/$REPO/releases/download/$tag/$asset"
+dest="$INSTALL_DIR/eqs"
+echo "Installing eqs ($tag, $os-$arch) → $dest"
+
+tmp="$(mktemp)"
+curl -fSL --progress-bar "$url" -o "$tmp"
+chmod +x "$tmp"
+if [ -w "$INSTALL_DIR" ]; then
+  mv "$tmp" "$dest"
+else
+  echo "(elevating to write $INSTALL_DIR)"
+  sudo mv "$tmp" "$dest"
+fi
+
+echo "✓ eqs $tag installed. Get started: eqs login"
