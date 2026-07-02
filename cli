@@ -2,4 +2,4 @@
 # The `eqs` CLI installer moved to https://get.cli.equantic.space (ADR-023).
 # This legacy endpoint (get.equantic.space/cli) forwards there so old links and
 # scripts keep working — it always installs the latest from the new home.
-curl -fsSL https://get.cli.equantic.space | sh
+curl -fsSL https://get.cli.equantic.space/install.sh | sh
