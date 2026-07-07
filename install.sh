@@ -13,6 +13,7 @@
 set -eu
 
 REPO="eQuantic/equantic-space-setup"
+CLI_REPO="eQuantic/equantic-space-cli-setup"   # the eqs CLI ships from its own repo (ADR-023)
 NODE_VERSION="${EQS_NODE_VERSION:-22.20.0}"
 EQS_HOME="${EQS_HOME:-/opt/equantic}"
 SETUP_PORT="${EQS_SETUP_PORT:-3000}"
@@ -39,19 +40,19 @@ install_cli() {
   [ "${EQS_SKIP_CLI:-0}" = "1" ] && return 0
   if command -v eqs >/dev/null 2>&1; then ok "eqs CLI already installed"; return 0; fi
   log "Installing the eqs CLI…"
-  cli_tag="$(curl -fsSL "https://api.github.com/repos/$REPO/releases" 2>/dev/null \
+  cli_tag="$(curl -fsSL "https://api.github.com/repos/$CLI_REPO/releases" 2>/dev/null \
     | grep -oE '"tag_name": *"cli-v[^"]+"' | head -1 \
     | sed -E 's/.*"(cli-v[^"]+)".*/\1/')"
   if [ -z "$cli_tag" ]; then
     printf '\033[33m! eqs CLI release not found yet — skipping\033[0m\n'
     return 0
   fi
-  if curl -fSL "https://github.com/$REPO/releases/download/$cli_tag/eqs-linux-$ARCH" \
+  if curl -fSL "https://github.com/$CLI_REPO/releases/download/$cli_tag/eqs-linux-$ARCH" \
        -o /usr/local/bin/eqs 2>/dev/null; then
     chmod +x /usr/local/bin/eqs
     ok "eqs CLI $cli_tag installed — run: eqs login"
   else
-    printf '\033[33m! eqs CLI download failed — skipping (later: curl -fsSL https://get.equantic.space/cli | sh)\033[0m\n'
+    printf '\033[33m! eqs CLI download failed — skipping (later: curl -fsSL https://get.cli.equantic.space/install.sh | sh)\033[0m\n'
   fi
 }
 
