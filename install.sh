@@ -134,10 +134,17 @@ start() { # name, workdir, env-prefixed command…
   ( cd "$wd" && nohup env "$@" >"$EQS_HOME/logs/$name.log" 2>&1 & echo $! >"$EQS_HOME/run/$name.pid" )
 }
 
+# `env` starts the wizard with ONLY what is listed here, so anything the License
+# step needs must be forwarded explicitly. EQS_LICENSE_PUBLIC_KEY verifies an
+# offline (signed) serial without reaching the control plane — required by the
+# install that HOSTS that plane, and by air-gapped installs. Absent, offline
+# serials simply fail closed and the normal online activation is unaffected.
 start api "$APP_DIR/api" \
   API_PORT="$API_PORT" WEB_URL="http://localhost:$SETUP_PORT" \
   EQS_IMAGE_BUNDLE_DIR="$APP_DIR/images" EQS_RUN_DIR="$EQS_HOME/run" \
   EQS_VERSION="$VERSION" \
+  EQS_LICENSE_PUBLIC_KEY="${EQS_LICENSE_PUBLIC_KEY:-}" \
+  EQS_CONTROL_PLANE_URL="${EQS_CONTROL_PLANE_URL:-}" \
   "$NODE_BIN" dist/main.setup.js
 start platform "$APP_DIR/platform" \
   PORT="$SETUP_PORT" HOSTNAME=0.0.0.0 NEXT_PUBLIC_API_URL="http://localhost:$API_PORT" \
