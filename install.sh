@@ -101,6 +101,12 @@ rm -f "$EQS_HOME/bundle.tar.gz"
 VERSION="$(cat "$APP_DIR/VERSION" 2>/dev/null || echo '')"
 ok "Bundle extracted (${VERSION:-?})"
 
+# The key the release baked into the bundle, so a customer verifying an offline
+# serial needs to know nothing: the vendor ships its own public key. An explicit
+# EQS_LICENSE_PUBLIC_KEY still wins, for a staging plane or a rotated key.
+BUNDLED_LICENSE_KEY="$(cat "$APP_DIR/LICENSE_PUBLIC_KEY" 2>/dev/null || true)"
+LICENSE_PUBLIC_KEY="${EQS_LICENSE_PUBLIC_KEY:-$BUNDLED_LICENSE_KEY}"
+
 # ── 4. update mode — upgrade an existing platform in place (ADR-012) ───────────
 # When a platform is already running on this host, upgrade it from THIS bundle
 # host-side (the images travel in the bundle — no registry, no GitHub) instead of
@@ -111,6 +117,22 @@ if [ "${EQS_FORCE_INSTALL:-0}" != "1" ] \
   && command -v k3s >/dev/null 2>&1 \
   && k3s kubectl get deployment equantic-space-api -n equantic-space >/dev/null 2>&1; then
   log "Existing platform detected — updating to ${VERSION:-?} (without reinstalling)…"
+  # Carry the bundle's license public key into an ALREADY-provisioned platform
+  # (ADR-018 amendment). A fresh install gets it from provisioning, but an update
+  # never re-renders the Secret or the Deployment — so a box installed before this
+  # existed cannot verify its own offline serial and reports itself unlicensed, with
+  # nothing wrong with the licence. Both writes are idempotent, and the public key
+  # is safe in plain sight: it verifies signatures and cannot produce them.
+  if [ -n "$LICENSE_PUBLIC_KEY" ]; then
+    k3s kubectl patch secret equantic-space-platform -n equantic-space --type merge \
+      -p "{\"stringData\":{\"EQS_LICENSE_PUBLIC_KEY\":\"$LICENSE_PUBLIC_KEY\"}}" \
+      >/dev/null 2>&1 || true
+    # The Deployment of an older install has no env entry for it, so the Secret
+    # alone would never reach the pod.
+    k3s kubectl set env deployment/equantic-space-api -n equantic-space \
+      EQS_LICENSE_PUBLIC_KEY="$LICENSE_PUBLIC_KEY" >/dev/null 2>&1 \
+      && log "License public key carried into the running platform." || true
+  fi
   if ( cd "$APP_DIR/api" && EQS_IMAGE_BUNDLE_DIR="$APP_DIR/images" EQS_VERSION="$VERSION" "$NODE_BIN" dist/main.update.js ); then
     ok "Platform updated to ${VERSION:-?}."
     install_cli
@@ -134,11 +156,6 @@ start() { # name, workdir, env-prefixed command…
   ( cd "$wd" && nohup env "$@" >"$EQS_HOME/logs/$name.log" 2>&1 & echo $! >"$EQS_HOME/run/$name.pid" )
 }
 
-# The key the release baked into the bundle, so a customer verifying an offline
-# serial needs to know nothing: the vendor ships its own public key. An explicit
-# EQS_LICENSE_PUBLIC_KEY still wins, for a staging plane or a rotated key.
-BUNDLED_LICENSE_KEY="$(cat "$APP_DIR/LICENSE_PUBLIC_KEY" 2>/dev/null || true)"
-
 # `env` starts the wizard with ONLY what is listed here, so anything the License
 # step needs must be forwarded explicitly. EQS_LICENSE_PUBLIC_KEY verifies an
 # offline (signed) serial without reaching the control plane — required by the
@@ -148,7 +165,7 @@ start api "$APP_DIR/api" \
   API_PORT="$API_PORT" WEB_URL="http://localhost:$SETUP_PORT" \
   EQS_IMAGE_BUNDLE_DIR="$APP_DIR/images" EQS_RUN_DIR="$EQS_HOME/run" \
   EQS_VERSION="$VERSION" \
-  EQS_LICENSE_PUBLIC_KEY="${EQS_LICENSE_PUBLIC_KEY:-$BUNDLED_LICENSE_KEY}" \
+  EQS_LICENSE_PUBLIC_KEY="$LICENSE_PUBLIC_KEY" \
   EQS_CONTROL_PLANE_URL="${EQS_CONTROL_PLANE_URL:-}" \
   "$NODE_BIN" dist/main.setup.js
 start platform "$APP_DIR/platform" \
