@@ -5,7 +5,8 @@
 #   curl -fsSL https://get.equantic.space/install.sh | sudo sh
 #
 # This script installs NOTHING on the host. It only downloads a portable Node
-# runtime and the standalone platform bundle, runs the api+web in **setup mode**
+# runtime, the standalone platform bundle and the platform images of the same
+# release (x64 or arm64, whichever this host is), runs the api+web in **setup mode**
 # (stateless — no database), and prints the URL of the install wizard. The setup
 # wizard is what installs everything else (Docker/k3s, Postgres in-cluster, TLS).
 # Re-running it is safe: it stops the previous setup processes and starts fresh.
@@ -89,17 +90,63 @@ else
   ok "Node v$NODE_VERSION already present"
 fi
 
-# ── 3. platform bundle (standalone web + api) ─────────────────────────────────
+# ── 3. platform bundle (standalone web + api) and its images ──────────────────
+# Both come from the same GitHub release. The images are an asset of their own,
+# the one the in-cluster update fetches alone (ADR-012), so a release no longer
+# ships them twice. A bundle cut before that still carries its images and needs
+# nothing else. EQS_RELEASES_URL points at a mirror laid out like GitHub's
+# release downloads, which is also how a release checks this script before
+# publishing (scripts/lib/install-check.sh).
+RELEASES_URL="${EQS_RELEASES_URL:-https://github.com/$REPO/releases}"
+
+# The HTTP status decides the advice, not curl's exit code: a release asset
+# that does not exist has come back as exit 22 and as exit 56 (GitHub closes
+# the stream after its 404). A missing file, an unreachable host and a server
+# error need different advice.
+fetch() { # url dest what
+  code="$(curl -fSL -w '%{http_code}' "$1" -o "$2")" && return 0
+  case "$code" in
+    404) die "The release has no $3 for linux-$ARCH ($1). eQuantic Space ships for x64 and arm64." ;;
+    000) die "Could not reach $RELEASES_URL for the $3. Check this host's outbound access." ;;
+    2*) die "The download of the $3 broke off midway. Run the installer again." ;;
+    *) die "The download of the $3 failed (HTTP $code from $1). Run the installer again in a moment." ;;
+  esac
+}
+
 log "Downloading the platform (standalone bundle)…"
 APP_DIR="$EQS_HOME/app"
 rm -rf "$APP_DIR"; mkdir -p "$APP_DIR"
-BUNDLE_URL="https://github.com/$REPO/releases/latest/download/equantic-space-linux-$ARCH.tar.gz"
-curl -fSL "$BUNDLE_URL" -o "$EQS_HOME/bundle.tar.gz" \
-  || die "Bundle not found for linux-$ARCH. Build it with: EQS_PLATFORM=linux/$ARCH ./scripts/release-setup.sh"
+fetch "$RELEASES_URL/latest/download/equantic-space-linux-$ARCH.tar.gz" "$EQS_HOME/bundle.tar.gz" "platform bundle"
 tar -xz -C "$APP_DIR" -f "$EQS_HOME/bundle.tar.gz" --strip-components=1
 rm -f "$EQS_HOME/bundle.tar.gz"
 VERSION="$(cat "$APP_DIR/VERSION" 2>/dev/null || echo '')"
 ok "Bundle extracted (${VERSION:-?})"
+
+# The images of THAT version, never /latest again: a release published between
+# the two downloads would pair this bundle with another version's images. The
+# checksum published beside them is checked before anything is unpacked.
+if [ ! -f "$APP_DIR/images/platform-images.tar" ]; then
+  [ -n "$VERSION" ] || die "The bundle names no version, so its images cannot be matched to it."
+  IMAGES="platform-images-linux-$ARCH.tar.gz"
+  log "Downloading the platform images (${VERSION})…"
+  fetch "$RELEASES_URL/download/$VERSION/$IMAGES" "$EQS_HOME/$IMAGES" "platform images"
+  fetch "$RELEASES_URL/download/$VERSION/$IMAGES.sha256" "$EQS_HOME/$IMAGES.sha256" "checksum of the platform images"
+  expected="$(cut -d ' ' -f 1 < "$EQS_HOME/$IMAGES.sha256")"
+  if command -v sha256sum >/dev/null 2>&1; then
+    actual="$(sha256sum "$EQS_HOME/$IMAGES" | cut -d ' ' -f 1)"
+  elif command -v shasum >/dev/null 2>&1; then
+    actual="$(shasum -a 256 "$EQS_HOME/$IMAGES" | cut -d ' ' -f 1)"
+  else
+    die "sha256sum is required to verify the platform images."
+  fi
+  [ -n "$expected" ] && [ "$actual" = "$expected" ] \
+    || die "The platform images do not match their checksum (download corrupted?). Run the installer again."
+  mkdir -p "$APP_DIR/images"
+  gzip -dc "$EQS_HOME/$IMAGES" > "$APP_DIR/images/platform-images.tar" \
+    || die "Could not unpack the platform images into $APP_DIR/images (is the disk full?)."
+  rm -f "$EQS_HOME/$IMAGES" "$EQS_HOME/$IMAGES.sha256"
+  ok "Platform images ready"
+fi
 
 # The key the release baked into the bundle, so a customer verifying an offline
 # serial needs to know nothing: the vendor ships its own public key. An explicit
@@ -109,7 +156,7 @@ LICENSE_PUBLIC_KEY="${EQS_LICENSE_PUBLIC_KEY:-$BUNDLED_LICENSE_KEY}"
 
 # ── 4. update mode — upgrade an existing platform in place (ADR-012) ───────────
 # When a platform is already running on this host, upgrade it from THIS bundle
-# host-side (the images travel in the bundle — no registry, no GitHub) instead of
+# host-side (with the images step 3 fetched beside it, no registry) instead of
 # re-running the install wizard. This is the only upgrade path for instances that
 # predate the in-cluster auto-update. Force the first-run wizard with
 # EQS_FORCE_INSTALL=1 (recovery).
