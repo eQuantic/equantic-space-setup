@@ -203,6 +203,72 @@ else
   /usr/local/lib/eqs-fleet/eqs-wg-sync.sh || true
 fi
 
+# ── 6b. the container AppArmor profile ─────────────────────────────────────────
+# Before k3s, so containerd finds it loaded and keeps it. On newer kernels the profile
+# containerd generates denies every signal between a container's processes (the label is
+# stacked with unconfined), and gosu, the start of the PostgreSQL and Redis images, never
+# returns. apps/api/src/shared/setup/provisioning/apparmor.ts explains it and carries the
+# same text, which apparmor.spec.ts keeps equal to this one.
+if [ -r /sys/module/apparmor/parameters/enabled ] && grep -q '^Y' /sys/module/apparmor/parameters/enabled; then
+  mkdir -p /etc/apparmor.d
+  cat > /etc/apparmor.d/cri-containerd.apparmor.d <<'EQS_APPARMOR_PROFILE'
+#include <tunables/global>
+
+# The default AppArmor profile containerd gives CRI containers (k3s), installed by eQuantic Space
+# so the system loads it at boot, before k3s, and containerd keeps it instead of generating its own.
+# On newer kernels a container process carries this profile stacked with unconfined,
+# "cri-containerd.apparmor.d//&unconfined"; without rules for that label every signal between the
+# processes and threads of a container is denied, and gosu (PostgreSQL, Redis) never starts.
+profile cri-containerd.apparmor.d flags=(attach_disconnected,mediate_deleted) {
+  #include <abstractions/base>
+
+  network,
+  capability,
+  file,
+  umount,
+
+  # Host (privileged) processes may send signals to container processes.
+  signal (receive) peer=unconfined,
+  # Container processes may send signals amongst themselves, under either label.
+  signal (send,receive) peer=cri-containerd.apparmor.d,
+  signal (send,receive) peer="cri-containerd.apparmor.d//&unconfined",
+
+  deny @{PROC}/* w,   # deny write for all files directly in /proc (not in a subdir)
+  # deny write to files not in /proc/<number>/** or /proc/sys/**
+  deny @{PROC}/{[^1-9],[^1-9][^0-9],[^1-9s][^0-9y][^0-9s],[^1-9][^0-9][^0-9][^0-9/]*}/** w,
+  deny @{PROC}/sys/[^k]** w,  # deny /proc/sys except /proc/sys/k* (effectively /proc/sys/kernel)
+  deny @{PROC}/sys/kernel/{?,??,[^s][^h][^m]**} w,  # deny everything except shm* in /proc/sys/kernel/
+  deny @{PROC}/sysrq-trigger rwklx,
+  deny @{PROC}/kcore rwklx,
+
+  deny mount,
+
+  deny /sys/[^f]*/** wklx,
+  deny /sys/f[^s]*/** wklx,
+  deny /sys/fs/[^c]*/** wklx,
+  deny /sys/fs/c[^g]*/** wklx,
+  deny /sys/fs/cg[^r]*/** wklx,
+  deny /sys/firmware/** rwklx,
+  deny /sys/devices/virtual/powercap/** rwklx,
+  deny /sys/kernel/security/** rwklx,
+
+  # Suppress ptrace denials when using ps inside a container, under either label.
+  ptrace (trace,read,tracedby,readby) peer=cri-containerd.apparmor.d,
+  ptrace (trace,read,tracedby,readby) peer="cri-containerd.apparmor.d//&unconfined",
+}
+EQS_APPARMOR_PROFILE
+  chmod 0644 /etc/apparmor.d/cri-containerd.apparmor.d
+  if command -v apparmor_parser >/dev/null 2>&1; then
+    apparmor_parser -r /etc/apparmor.d/cri-containerd.apparmor.d \
+      || die "AppArmor is enabled but the container profile could not be loaded: containers that use gosu would never start."
+    ok "container AppArmor profile installed"
+  else
+    log "AppArmor is enabled but apparmor_parser is not installed — the container profile is written and loads at boot once the apparmor package is installed."
+  fi
+else
+  log "AppArmor is not enabled on this node — no container profile to install."
+fi
+
 # ── 7. join k3s over the overlay ──────────────────────────────────────────────
 if command -v k3s >/dev/null 2>&1; then
   ok "k3s already installed on this node — skipping install (the node is joined)."
